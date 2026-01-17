@@ -2,10 +2,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import SchedulingSimulationSerializer
-from .algorithms import fcfs, sjf_non_preemptive, srtf_preemptive, round_robin, priority_preemptive
 from .models import AlgorithmTheory
 from .serializers import AlgorithmTheorySerializer
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import SchedulingSimulationSerializer
+from .algorithms import (
+    fcfs, sjf_non_preemptive, srtf_preemptive, round_robin, priority_preemptive,
+    bankers_algorithm, first_fit, best_fit,
+    fifo_page_replacement, lru_page_replacement, optimal_page_replacement
+)
 
+# ---------------- CPU Scheduling ---------------- #
 class FCFSAPI(APIView):
     def post(self, request):
         serializer = SchedulingSimulationSerializer(data=request.data)
@@ -35,11 +44,61 @@ class RoundRobinAPI(APIView):
             return Response(round_robin(serializer.validated_data["processes"], quantum))
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class PriorityPreemptiveAPI(APIView):
+class PriorityAPI(APIView):
     def post(self, request):
         serializer = SchedulingSimulationSerializer(data=request.data)
         if serializer.is_valid():
             return Response(priority_preemptive(serializer.validated_data["processes"]))
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ---------------- Banker’s Algorithm ---------------- #
+class BankerAPI(APIView):
+    def post(self, request):
+        serializer = SchedulingSimulationSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(bankers_algorithm(
+                processes=[f"P{i}" for i in range(len(serializer.validated_data["alloc"]))],
+                alloc=serializer.validated_data["alloc"],
+                max_req=serializer.validated_data["max_req"],
+                avail=serializer.validated_data["avail"]
+            ))
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ---------------- Memory Allocation ---------------- #
+class FirstFitAPI(APIView):
+    def post(self, request):
+        serializer = SchedulingSimulationSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(first_fit(serializer.validated_data["processes"], serializer.validated_data["blocks"]))
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class BestFitAPI(APIView):
+    def post(self, request):
+        serializer = SchedulingSimulationSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(best_fit(serializer.validated_data["processes"], serializer.validated_data["blocks"]))
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ---------------- Page Replacement ---------------- #
+class FIFOPageAPI(APIView):
+    def post(self, request):
+        serializer = SchedulingSimulationSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(fifo_page_replacement(serializer.validated_data["pages"], len(serializer.validated_data["blocks"])))
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class LRUPageAPI(APIView):
+    def post(self, request):
+        serializer = SchedulingSimulationSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(lru_page_replacement(serializer.validated_data["pages"], len(serializer.validated_data["blocks"])))
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class OPTPageAPI(APIView):
+    def post(self, request):
+        serializer = SchedulingSimulationSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(optimal_page_replacement(serializer.validated_data["pages"], len(serializer.validated_data["blocks"])))
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AlgorithmTheoryAPIView(APIView):
