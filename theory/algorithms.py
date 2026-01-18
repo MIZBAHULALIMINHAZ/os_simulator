@@ -106,47 +106,87 @@ def srtf_preemptive(processes):
     return {"timeline": timeline, "process_summary": completed}
 
 
-def round_robin(processes, quantum=1):
+from collections import deque
+
+def round_robin(processes, quantum):
+    # Defensive copy & sort by arrival
     processes = [dict(p) for p in processes]
+    processes.sort(key=lambda p: p.get("arrival", 0))
+
     n = len(processes)
-    remaining = {p["pid"]: p["burst"] for p in processes}
+    arrival = {p["pid"]: p.get("arrival", 0) for p in processes}
+    burst = {p["pid"]: p["burst"] for p in processes}
+    remaining = burst.copy()
+
+    ready_queue = deque()
+    arrived = set()
+    completed = set()
+
+    first_response = {}
+    completion_time = {}
+
     timeline = []
-    completed = []
     time = 0
-    queue = []
 
     while len(completed) < n:
+        # Add newly arrived processes to queue
         for p in processes:
-            if p.get("arrival", 0) <= time and p["pid"] not in queue and p["pid"] in remaining:
-                queue.append(p["pid"])
-        if queue:
-            pid = queue.pop(0)
+            pid = p["pid"]
+            if arrival[pid] <= time and pid not in arrived:
+                ready_queue.append(pid)
+                arrived.add(pid)
+
+        if ready_queue:
+            pid = ready_queue.popleft()
+
+            # Record first CPU response time
+            if pid not in first_response:
+                first_response[pid] = time
+
             exec_time = min(quantum, remaining[pid])
-            timeline.extend([{"time": t, "pid": pid} for t in range(time, time + exec_time)])
+
+            # Execute per unit time (for timeline)
+            for _ in range(exec_time):
+                timeline.append({"time": time, "pid": pid})
+                time += 1
+
+                # Check for new arrivals during execution
+                for p in processes:
+                    npid = p["pid"]
+                    if arrival[npid] <= time and npid not in arrived:
+                        ready_queue.append(npid)
+                        arrived.add(npid)
+
             remaining[pid] -= exec_time
+
             if remaining[pid] == 0:
-                end_time = time + exec_time
-                p = next(x for x in processes if x["pid"] == pid)
-                start_time = end_time - p["burst"]
-                waiting_time = end_time - p.get("arrival", 0) - p["burst"]
-                turnaround_time = end_time - p.get("arrival", 0)
-                completed.append({
-                    "pid": pid,
-                    "arrival": p.get("arrival", 0),
-                    "burst": p["burst"],
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "waiting_time": waiting_time,
-                    "turnaround_time": turnaround_time
-                })
+                completed.add(pid)
+                completion_time[pid] = time
             else:
-                queue.append(pid)
-            time += exec_time
+                ready_queue.append(pid)
+
         else:
             timeline.append({"time": time, "pid": "idle"})
             time += 1
 
-    return {"timeline": timeline, "process_summary": completed}
+    # Build process summary
+    process_summary = []
+    for pid in burst:
+        turnaround = completion_time[pid] - arrival[pid]
+        waiting = turnaround - burst[pid]
+        process_summary.append({
+            "pid": pid,
+            "arrival": arrival[pid],
+            "burst": burst[pid],
+            "first_response_time": first_response[pid],
+            "completion_time": completion_time[pid],
+            "waiting_time": waiting,
+            "turnaround_time": turnaround
+        })
+
+    return {"timeline": timeline, "process_summary": process_summary}
+
+
 
 
 def priority_preemptive(processes):
